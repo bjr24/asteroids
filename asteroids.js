@@ -99,7 +99,6 @@
     function Drawable() {
       this.closeEnough = __bind(this.closeEnough, this);
       this.checkCollision = __bind(this.checkCollision, this);
-      this.loadImage = __bind(this.loadImage, this);
       this.applyForce = __bind(this.applyForce, this);
       this.update = __bind(this.update, this);
       this.draw = __bind(this.draw, this);
@@ -107,11 +106,14 @@
 
     Drawable.prototype.draw = function() {
       this.update(fpsToInterval(frameRate));
-      canvas.save();
-      canvas.translate(this.x, this.y);
-      canvas.rotate(-this.heading + Math.PI / 2);
-      this.render();
-      return canvas.restore();
+      try {
+        canvas.save();
+        canvas.translate(this.x, this.y);
+        canvas.rotate(-this.heading + Math.PI / 2);
+        return this.render();
+      } finally {
+        canvas.restore();
+      }
     };
 
     Drawable.prototype.update = function(dt) {
@@ -137,24 +139,6 @@
     Drawable.prototype.applyForce = function(magnitude) {
       this.xForce += Math.cos(this.heading) * magnitude;
       return this.yForce -= Math.sin(this.heading) * magnitude;
-    };
-
-    Drawable.prototype.loadImage = function(src, scale) {
-      var image;
-      if (scale == null) {
-        scale = imageScaleScaleFactor;
-      }
-      image = new Image();
-      image.onload = (function(_this) {
-        return function() {
-          _this.width = image.width * scale;
-          _this.height = image.height * scale;
-          return _this.drawImage = function() {
-            return canvas.drawImage(image, -_this.width / 2, -_this.height / 2, _this.width, _this.height);
-          };
-        };
-      })(this);
-      return image.src = src;
     };
 
     Drawable.prototype.checkCollision = function(otherItems) {
@@ -183,9 +167,22 @@
   })();
 
   Ship = (function(_super) {
-    var rotateSize;
+    var height, image, rotateSize, width;
 
     __extends(Ship, _super);
+
+    width = 0;
+
+    height = 0;
+
+    image = new Image();
+
+    image.onload = function() {
+      width = image.width * imageScaleScaleFactor;
+      return height = image.height * imageScaleScaleFactor;
+    };
+
+    image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
 
     function Ship() {
       this.randomMove = __bind(this.randomMove, this);
@@ -193,35 +190,15 @@
       this.rotateRight = __bind(this.rotateRight, this);
       this.rotateLeft = __bind(this.rotateLeft, this);
       this.applyThrust = __bind(this.applyThrust, this);
-      this.render = __bind(this.render, this);
-      this.setInitialPosition = __bind(this.setInitialPosition, this);
-      var image;
-      this.width = 0;
-      this.length = 0;
-      image = new Image();
-      image.onload = (function(_this) {
-        return function() {
-          _this.width = image.width * imageScaleScaleFactor;
-          _this.height = image.height * imageScaleScaleFactor;
-          return _this.drawImage = function() {
-            return canvas.drawImage(image, -_this.width / 2, -_this.height / 2, _this.width, _this.height);
-          };
-        };
-      })(this);
-      image.src = "spaceship.gif";
-      this.setInitialPosition();
-    }
-
-    Ship.prototype.setInitialPosition = function() {
       this.x = canvasWidth / 2;
       this.y = canvasHeight / 2;
       this.xForce = 0;
       this.yForce = 0;
-      return this.heading = Math.PI / 2;
-    };
+      this.heading = Math.PI / 2;
+    }
 
     Ship.prototype.render = function() {
-      return this.drawImage();
+      return canvas.drawImage(image, -width / 2, -height / 2, width, height);
     };
 
     Ship.prototype.applyThrust = function() {
@@ -259,18 +236,15 @@
 
     image = new Image();
 
-    image.onload = function() {
-      return Asteroid.drawImage = function(scaling) {
-        return canvas.drawImage(image, -Asteroid.width / 2, -Asteroid.height / 2, Asteroid.width, Asteroid.height);
-      };
-    };
+    image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/asteroid-img.png";
 
-    image.src = "asteroid-img.png";
-
-    function Asteroid(size, parent, first) {
+    function Asteroid(size, parent, hitter, first) {
       this.size = size != null ? size : 2;
       if (parent == null) {
         parent = null;
+      }
+      if (hitter == null) {
+        hitter = null;
       }
       if (first == null) {
         first = false;
@@ -278,16 +252,12 @@
       this.update = __bind(this.update, this);
       this.exists = __bind(this.exists, this);
       this.render = __bind(this.render, this);
-      this.width = this.size / 4 * image.width;
-      this.height = this.size / 4 * image.height;
-      this.length = this.height;
       this.xForce = 0;
       this.yForce = 0;
-      this.loadImage("asteroid-img.png", this.size / 4);
-      if ((parent != null)) {
+      if (parent != null) {
         this.x = parent.x;
         this.y = parent.y;
-        this.heading = parent.heading + (first ? .2 : -0.2);
+        this.heading = hitter.heading + (first ? .2 : -0.2);
       } else {
         this.x = Math.randInt(canvasWidth);
         this.y = Math.randInt(canvasHeight);
@@ -298,7 +268,10 @@
     }
 
     Asteroid.prototype.render = function() {
-      return this.drawImage();
+      var height, width;
+      width = this.size / 4 * image.width;
+      height = this.size / 4 * image.height;
+      return canvas.drawImage(image, -width / 2, -height / 2, width, height);
     };
 
     Asteroid.prototype.exists = function() {
@@ -306,19 +279,21 @@
     };
 
     Asteroid.prototype.update = function(dt) {
-      var b, _i, _len;
+      var b, hitter, _i, _len;
       Asteroid.__super__.update.call(this, dt);
+      hitter = null;
       for (_i = 0, _len = bullets.length; _i < _len; _i++) {
         b = bullets[_i];
         if (!(this.closeEnough(b))) {
           continue;
         }
         b.exists(false);
+        hitter = b;
         this.gotHit = true;
       }
       if (this.gotHit && this.size > 1) {
-        asteroids.push(new Asteroid(1, this, false));
-        return asteroids.push(new Asteroid(1, this, true));
+        asteroids.push(new Asteroid(1, this, hitter, false));
+        return asteroids.push(new Asteroid(1, this, hitter, true));
       }
     };
 
@@ -339,14 +314,14 @@
       this.yForce = ship.yForce;
       this.heading = ship.heading;
       this.distanceRemaining = 50 * 60;
-      this.length = 25;
+      this.height = 25;
       this.width = 10;
       this.applyForce(thrust / 20);
     }
 
     Bullet.prototype.render = function() {
       canvas.fillStyle = "#FF0000";
-      return canvas.fillRect(-this.width / 2, -this.length - 10, this.width, this.length);
+      return canvas.fillRect(-this.width / 2, -this.height - 10, this.width, this.height);
     };
 
     Bullet.prototype.update = function(dt) {

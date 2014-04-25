@@ -11,6 +11,8 @@ ship = null
 bullets = []
 asteroids = []
 
+
+
 gameInit = ->
   canvas = $("#gameCanvas")[0].getContext("2d")
   canvasWidth = $("#gameCanvas").width()
@@ -25,6 +27,11 @@ gameInit = ->
   #setInterval(ship.randomMove, 200)
 
 draw = ->
+#  canvas.save()
+#  canvas.fillStyle = "000000"
+#  canvas.fillRect(0, 0, canvasWidth, canvasHeight)
+#  canvas.restore()
+
   canvas.clearRect(0, 0, canvasWidth, canvasHeight)
   ship.draw()
   bullets = bullets.filter (b) -> b.exists()
@@ -66,11 +73,13 @@ bindControls = (ship) ->
 class Drawable
   draw: =>
     @update(fpsToInterval(frameRate))
-    canvas.save()
-    canvas.translate(@x, @y)
-    canvas.rotate(-@heading + Math.PI / 2)
-    @render()
-    canvas.restore()
+    try
+      canvas.save()
+      canvas.translate(@x, @y)
+      canvas.rotate(-@heading + Math.PI / 2)
+      @render()
+    finally
+      canvas.restore()
 
   update: (dt) =>
     newX = @x + @xForce * dt * updateCoefficient
@@ -92,15 +101,6 @@ class Drawable
     @yForce -= Math.sin(@heading) * magnitude
 
 
-  loadImage: (src, scale = imageScaleScaleFactor) =>
-    image = new Image()
-    image.onload = =>
-      @width = image.width * scale
-      @height = image.height * scale
-      @drawImage = =>
-        canvas.drawImage(image, -@width / 2, -@height / 2, @width, @height)
-    image.src = src
-
   checkCollision: (otherItems) =>
     for e in otherItems when @closeEnough(e)
       return true
@@ -113,19 +113,16 @@ class Drawable
 
 
 class Ship extends Drawable
-  constructor: ->
-    @width = 0
-    @length = 0
-    image = new Image()
-    image.onload = =>
-      @width = image.width * imageScaleScaleFactor
-      @height = image.height * imageScaleScaleFactor
-      @drawImage = =>
-        canvas.drawImage(image, -@width / 2, -@height / 2, @width, @height)
-    image.src = "spaceship.gif"
-    @setInitialPosition()
+  width = 0
+  height = 0
+  image = new Image()
+  image.onload = ->
+    width = image.width * imageScaleScaleFactor
+    height = image.height * imageScaleScaleFactor
+  # image.src = "spaceship.gif"
+  image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
 
-  setInitialPosition: =>
+  constructor: ->
     @x = canvasWidth / 2
     @y = canvasHeight / 2
     @xForce = 0
@@ -133,8 +130,8 @@ class Ship extends Drawable
     @heading = Math.PI / 2
 
 
-  render: =>
-    @drawImage()
+  render: ->
+    canvas.drawImage(image, -width / 2, -height / 2, width, height)
 
   applyThrust: =>
     @applyForce(thrust / 1000)
@@ -158,22 +155,15 @@ class Ship extends Drawable
 
 class Asteroid extends Drawable
   image = new Image()
-  image.onload = =>
-    @drawImage = (scaling) =>
-      canvas.drawImage(image, -@width / 2, -@height / 2, @width, @height)
-  image.src = "asteroid-img.png"
+  image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/asteroid-img.png";
 
-  constructor: (@size = 2, parent = null, first = false) ->
-    @width = @size / 4 * image.width
-    @height = @size / 4 * image.height
-    @length = @height
+  constructor: (@size = 2, parent = null, hitter = null, first = false) ->
     @xForce = 0
     @yForce = 0
-    @loadImage("asteroid-img.png", @size / 4)
-    if (parent?)
+    if parent?
       @x = parent.x
       @y = parent.y
-      @heading = parent.heading + (if first then .2 else -0.2)
+      @heading = hitter.heading + (if first then .2 else -0.2)
     else
       @x = Math.randInt(canvasWidth)
       @y = Math.randInt(canvasHeight)
@@ -183,19 +173,23 @@ class Asteroid extends Drawable
     @gotHit = false
 
   render: =>
-    @drawImage()
+    width = @size / 4 * image.width
+    height = @size / 4 * image.height
+    canvas.drawImage(image, -width / 2, -height / 2, width, height)
 
   exists: =>
     not @gotHit
 
   update: (dt) =>
     super dt
+    hitter = null
     for b in bullets when @closeEnough(b)
       b.exists(false)
+      hitter = b
       @gotHit = true
     if @gotHit and @size > 1
-      asteroids.push(new Asteroid(1, @, false))
-      asteroids.push(new Asteroid(1, @, true))
+      asteroids.push(new Asteroid(1, @, hitter, false))
+      asteroids.push(new Asteroid(1, @, hitter, true))
 
 
 
@@ -207,13 +201,13 @@ class Bullet extends Drawable
     @yForce = ship.yForce
     @heading = ship.heading
     @distanceRemaining = 50 * 60
-    @length = 25
+    @height = 25
     @width = 10
     @applyForce(thrust / 20)
 
   render: =>
     canvas.fillStyle = "#FF0000"
-    canvas.fillRect(-@width / 2, -@length - 10, @width, @length)
+    canvas.fillRect(-@width / 2, -@height - 10, @width, @height)
 
   update: (dt) =>
     @distanceRemaining -= super
