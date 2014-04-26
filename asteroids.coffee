@@ -9,6 +9,7 @@ updateCoefficient = 1
 ship = null
 bullets = []
 asteroids = []
+stars = []
 healthBar = null
 score = 0
 
@@ -27,13 +28,15 @@ gameInit = ->
         asteroids.push(new Asteroid())
     ), 5000
 
+    stars.push(new Star()) for i in [0...30]
+
     setInterval(draw, fpsToInterval(frameRate))
     bindControls(ship)
 #setInterval(ship.randomMove, 200)
 
 
 draw = ->
-    canvas.clearRect(0, 0, canvasWidth, canvasHeight)
+    drawBackground()
     ship.draw()
     bullets = bullets.filter (b) ->
         b.exists()
@@ -44,6 +47,23 @@ draw = ->
     $("#asteroidCount").text(asteroids.length)
     a.draw() for a in asteroids
     healthBar.draw()
+
+
+
+drawBackground = ->
+    xformCanvas (c) =>
+        c.fillStyle = "#000000"
+        c.fillRect(0, 0, canvasWidth, canvasHeight)
+    s.draw() for s in stars
+
+
+xformCanvas = (fn) ->
+    canvas.save()
+    try
+        fn(canvas)
+    finally
+        canvas.restore()
+
 
 fpsToInterval = (fps) ->
     1000 / fps
@@ -77,13 +97,10 @@ bindControls = (ship) ->
 class Drawable
     draw: =>
         @update(fpsToInterval(frameRate))
-        try
-            canvas.save()
-            canvas.translate(@x, @y)
-            canvas.rotate(-@heading + Math.PI / 2)
+        xformCanvas (c) =>
+            c.translate(@x, @y)
+            c.rotate(-@heading + Math.PI / 2)
             @render()
-        finally
-            canvas.restore()
 
     update: (dt) =>
         newX = @x + @xForce * dt * updateCoefficient
@@ -135,13 +152,10 @@ class Ship extends Drawable
         @recovering = false
 
     render: ->
-        canvas.save()
-        try
+        xformCanvas (c) =>
             if @recovering
                 canvas.globalAlpha = .2
             canvas.drawImage(image, -width / 2, -height / 2, width, height)
-        finally
-            canvas.restore()
 
     applyThrust: =>
         @applyForce(thrust / 1000) unless @recovering
@@ -188,12 +202,20 @@ class HealthBar
         @setHealthLeft(@health - 1)
 
     draw: =>
-        canvas.save()
-        try
-            canvas.fillStyle = "#00FF00"
-            canvas.fillRect(@x, @y, @width, height)
-        finally
-            canvas.restore()
+        xformCanvas (c) =>
+            c.fillStyle = "#00FF00"
+            c.fillRect(@x, @y, @width, height)
+
+class Star
+    constructor: (@x = 0, @y = 0) ->
+        if @x is 0 and @y is 0
+            @x = Math.randInt(canvasWidth)
+            @y = Math.randInt(canvasHeight)
+    draw: =>
+        xformCanvas (c) =>
+            c.fillStyle = "#FFFFFF"
+            c.fillRect(@x, @y - 1, 1, 3)
+            c.fillRect(@x - 1, @y, 3, 1)
 
 
 class Asteroid extends Drawable
