@@ -1,7 +1,6 @@
 canvas = null
 canvasWidth = 0
 canvasHeight = 0
-imageScaleScaleFactor = .5
 frameRate = 20
 thrust = 5
 updateCoefficient = 1
@@ -11,6 +10,7 @@ bullets = []
 asteroids = []
 stars = []
 healthBar = null
+powerUp = null
 score = 0
 
 
@@ -27,6 +27,10 @@ gameInit = ->
     setInterval (->
         asteroids.push(new Asteroid())
     ), 5000
+
+    setInterval (->
+        powerUp = new PowerUp()
+    ), 30000
 
     stars.push(new Star()) for i in [0...30]
 
@@ -46,6 +50,10 @@ draw = ->
         a.exists()
     $("#asteroidCount").text(asteroids.length)
     a.draw() for a in asteroids
+
+    powerUp = null unless powerUp?.exists()
+    powerUp?.draw()
+
     healthBar.draw()
 
 
@@ -95,14 +103,27 @@ bindControls = (ship) ->
 
 
 class Drawable
+    constructor: (@x, @y) ->
+        @x ?= Math.randInt(canvasWidth)
+        @y ?= Math.randInt(canvasHeight)
+        @xForce = 0
+        @yForce = 0
+        @heading = Math.PI / 2
+        @rotation = @heading
+        @headingMatchesRotation = true
+        @drag = 0
+
     draw: =>
         @update(fpsToInterval(frameRate))
         xformCanvas (c) =>
             c.translate(@x, @y)
-            c.rotate(-@heading + Math.PI / 2)
-            @render()
+            rot = if @headingMatchesRotation then @heading else @rotation
+            c.rotate(-rot + Math.PI / 2)
+            @render(c)
 
     update: (dt) =>
+        @xForce -= @drag * @xForce
+        @yForce -= @drag * @yForce
         newX = @x + @xForce * dt * updateCoefficient
         newY = @y + @yForce * dt * updateCoefficient
         dx = newX - @x
@@ -138,24 +159,22 @@ class Ship extends Drawable
     height = 0
     image = new Image()
     image.onload = ->
-        width = image.width * imageScaleScaleFactor
-        height = image.height * imageScaleScaleFactor
+        width = image.width * .5
+        height = image.height * .5
     image.src = "spaceship.gif"
     #image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
 
     constructor: ->
         @x = canvasWidth / 2
         @y = canvasHeight / 2
-        @xForce = 0
-        @yForce = 0
-        @heading = Math.PI / 2
+        super(@x, @y)
+        @drag = .01
         @recovering = false
 
-    render: ->
-        xformCanvas (c) =>
-            if @recovering
-                canvas.globalAlpha = .2
-            canvas.drawImage(image, -width / 2, -height / 2, width, height)
+    render: (c) ->
+        if @recovering
+            c.globalAlpha = .4
+        c.drawImage(image, -width / 2, -height / 2, width, height)
 
     applyThrust: =>
         @applyForce(thrust / 1000) unless @recovering
@@ -178,6 +197,10 @@ class Ship extends Drawable
     update: =>
         super
         return if @recovering
+        @checkAsteroidCollision()
+        @checkPowerUpPickup()
+
+    checkAsteroidCollision: =>
         if (asteroids.some (a) => @closeEnough(a, a.radius))
             healthBar.decrement()
             @recovering = true
@@ -185,6 +208,11 @@ class Ship extends Drawable
                 @recovering = false
             ), 2000
 
+    checkPowerUpPickup: =>
+        return unless powerUp?
+        return unless @closeEnough(powerUp, height)
+        healthBar.increment()
+        powerUp.pickedUp = true
 
 class HealthBar
 
@@ -201,21 +229,16 @@ class HealthBar
     decrement: =>
         @setHealthLeft(@health - 1)
 
+    increment: =>
+        return unless @health < @maxHealth
+        @setHealthLeft(@health + 1)
+
     draw: =>
         xformCanvas (c) =>
             c.fillStyle = "#00FF00"
             c.fillRect(@x, @y, @width, height)
 
-class Star
-    constructor: (@x = 0, @y = 0) ->
-        if @x is 0 and @y is 0
-            @x = Math.randInt(canvasWidth)
-            @y = Math.randInt(canvasHeight)
-    draw: =>
-        xformCanvas (c) =>
-            c.fillStyle = "#FFFFFF"
-            c.fillRect(@x, @y - 1, 1, 3)
-            c.fillRect(@x - 1, @y, 3, 1)
+
 
 
 class Asteroid extends Drawable
@@ -238,17 +261,19 @@ class Asteroid extends Drawable
         if parent?
             @x = parent.x
             @y = parent.y
+            super(@x, @y)
             @heading = hitter.heading + (if first then .2 else -0.2)
         else
             @x = Math.randInt(canvasWidth)
             @y = Math.randInt(canvasHeight)
+            super(@x, @y)
             @heading = Math.random() * Math.PI * 2
 
         @applyForce(.1)
         @gotHit = false
 
-    render: =>
-        canvas.drawImage(image, -@radius, -@radius, @radius * 2, @radius * 2)
+    render: (c) =>
+        c.drawImage(image, -@radius, -@radius, @radius * 2, @radius * 2)
 
     exists: =>
         not @gotHit
@@ -272,6 +297,7 @@ class Bullet extends Drawable
     constructor: (ship) ->
         @x = ship.x
         @y = ship.y
+        super(@x, @y)
         @xForce = ship.xForce
         @yForce = ship.yForce
         @heading = ship.heading
@@ -280,9 +306,9 @@ class Bullet extends Drawable
         @width = 10
         @applyForce(thrust / 20)
 
-    render: =>
-        canvas.fillStyle = "#FF0000"
-        canvas.fillRect(-@width / 2, -@height - 10, @width, @height)
+    render: (c) =>
+        c.fillStyle = "#FF0000"
+        c.fillRect(-@width / 2, -@height - 10, @width, @height)
 
     update: =>
         @distanceRemaining -= super
@@ -290,6 +316,42 @@ class Bullet extends Drawable
     exists: (val = true) =>
         @distanceRemaining = -1 unless val
         @distanceRemaining > 0
+
+
+
+class PowerUp extends Drawable
+    width = 0
+    height = 0
+    image = new Image()
+    image.onload = ->
+        width = image.width / 9
+        height = image.height / 9
+    image.src = "mushroom.png"
+
+    constructor: ->
+        super
+        @createTimeMs = new Date().getTime()
+        @headingMatchesRotation = false
+        @heading = Math.random() * 2 * Math.PI
+        @applyForce(.05)
+        @pickedUp = false
+
+    render: (c) =>
+        c.drawImage(image, -width / 2, -height / 2, width, height)
+
+    lifetimeExceeded: () ->
+        (new Date().getTime() - @createTimeMs) > 10000
+
+    exists: =>
+        not @pickedUp and not @lifetimeExceeded()
+
+
+class Star extends Drawable
+
+    render: (c) =>
+        c.fillStyle = "#FFFFFF"
+        c.fillRect(0, -1, 1, 3)
+        c.fillRect(-1, 1, 3, 1)
 
 
 Math.randInt = (a, b = null) ->
