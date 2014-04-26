@@ -20,6 +20,7 @@ gameInit = ->
   ship = new Ship()
 
   asteroids.push(new Asteroid())
+  #asteroids.push(new Asteroid()) for i in [0...100]
   setInterval((-> asteroids.push(new Asteroid())), 5000)
 
   setInterval(draw, fpsToInterval(frameRate))
@@ -38,6 +39,7 @@ draw = ->
   b.draw() for b in bullets
 
   asteroids = asteroids.filter (a) -> a.exists()
+  $("#asteroidCount").text(asteroids.length)
   a.draw() for a in asteroids
 
 fpsToInterval = (fps) ->
@@ -69,6 +71,18 @@ bindControls = (ship) ->
   window.onkeypress = (evt) ->
     ship.shoot() if evt.charCode is 46 # '.'
 
+clamp = (val, min, max) ->
+  min if val < min
+  max if val > max
+  val
+
+circleRectIntersect = (cx, cy, radius, rLeft, rRight, rTop, rBottom) ->
+  closestX = clamp(cx, rLeft, rRight)
+  closestY = clamp(cy, rTop, rBottom)
+  distX = cx - closestX
+  distY = cy - closestY
+  distSq = distX * distX + distY * distY
+  return distSq < radius * radius
 
 class Drawable
   draw: =>
@@ -106,10 +120,10 @@ class Drawable
       return true
     return false
 
-  closeEnough: (other, distSquared = 600) =>
+  closeEnough: (other, dist = 25) =>
     dx = @x - other.x
     dy = @y - other.y
-    dx * dx + dy * dy < distSquared
+    dx * dx + dy * dy < dist * dist
 
 
 class Ship extends Drawable
@@ -119,8 +133,8 @@ class Ship extends Drawable
   image.onload = ->
     width = image.width * imageScaleScaleFactor
     height = image.height * imageScaleScaleFactor
-  # image.src = "spaceship.gif"
-  image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
+  image.src = "spaceship.gif"
+  #image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
 
   constructor: ->
     @x = canvasWidth / 2
@@ -154,10 +168,15 @@ class Ship extends Drawable
 
 
 class Asteroid extends Drawable
+  imageWidth = 154
   image = new Image()
-  image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/asteroid-img.png";
+  image.onload = ->
+    imageWidth = image.width
+  #image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/asteroid-img.png";
+  image.src = "asteroid-img.png"
 
-  constructor: (@size = 2, parent = null, hitter = null, first = false) ->
+  constructor: (@size = 3, parent = null, hitter = null, first = false) ->
+    @diameter = @size / 6 * imageWidth
     @xForce = 0
     @yForce = 0
     if parent?
@@ -173,9 +192,7 @@ class Asteroid extends Drawable
     @gotHit = false
 
   render: =>
-    width = @size / 4 * image.width
-    height = @size / 4 * image.height
-    canvas.drawImage(image, -width / 2, -height / 2, width, height)
+    canvas.drawImage(image, -@diameter / 2, -@diameter / 2, @diameter, @diameter)
 
   exists: =>
     not @gotHit
@@ -183,13 +200,13 @@ class Asteroid extends Drawable
   update: (dt) =>
     super dt
     hitter = null
-    for b in bullets when @closeEnough(b)
+    for b in bullets when @closeEnough(b, @diameter)
       b.exists(false)
       hitter = b
       @gotHit = true
     if @gotHit and @size > 1
-      asteroids.push(new Asteroid(1, @, hitter, false))
-      asteroids.push(new Asteroid(1, @, hitter, true))
+      asteroids.push(new Asteroid(@size - 1, @, hitter, false))
+      asteroids.push(new Asteroid(@size - 1, @, hitter, true))
 
 
 
