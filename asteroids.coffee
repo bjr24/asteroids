@@ -11,8 +11,9 @@ bullets = []
 asteroids = []
 stars = []
 healthBar = null
-powerUp = null
+powerUps = []
 score = 0
+numFireFlowersPickedUp = 0
 
 onLoad = ->
     imgBaseUrl = ""
@@ -21,6 +22,8 @@ onLoad = ->
         { name: "ship-thrust", url: imgBaseUrl + "spaceship-thrust.gif" }
         { name: "ship", url: imgBaseUrl + "spaceship-no-thrust.gif" }
         { name: "mushroom", url: imgBaseUrl + "mushroom.png" }
+        { name: "fireflower", url: imgBaseUrl + "fireflower.gif" }
+        { name: "fireball", url: imgBaseUrl + "fireball.png" }
     ]
     images.onLoad(gameInit)
     canvas = $("#gameCanvas")[0].getContext("2d")
@@ -38,8 +41,11 @@ gameInit = ->
         asteroids.push(new Asteroid())
     ), 5000
 
+
+    powerUps.push(new Mushroom())
+    powerUps.push(new FireFlower())
     setInterval (->
-        powerUp = new PowerUp()
+        powerUps.push(new FireFlower())
     ), 30000
 
     stars.push(new Star()) for i in [0...30]
@@ -53,7 +59,7 @@ gameInit = ->
         dy = y - ship.y
         ship.heading = Math.atan2(-dy, dx)
         ship.shoot()
-#setInterval(ship.randomMove, 200)
+    #setInterval(ship.randomMove, 200)
 
 
 draw = ->
@@ -68,8 +74,8 @@ draw = ->
     $("#asteroidCount").text(asteroids.length)
     a.draw() for a in asteroids
 
-    powerUp = null unless powerUp?.exists()
-    powerUp?.draw()
+    powerUps = powerUps.filter (p) -> p.exists()
+    p.draw() for p in powerUps
 
     healthBar.draw()
 
@@ -210,7 +216,13 @@ class Ship extends Drawable
         @heading -= rotateSize unless @recovering
 
     shoot: =>
-        bullets.push(new Bullet(@)) unless @recovering
+        return if @recovering
+        if numFireFlowersPickedUp > 0
+            bullets.push(new FireBall(@))
+            numFireFlowersPickedUp -= 1
+        else
+            bullets.push(new Bullet(@))
+
 
     randomMove: =>
         moves = [@applyThrust, @rotateLeft, @rotateRight, @shoot]
@@ -232,10 +244,10 @@ class Ship extends Drawable
             ), 2000
 
     checkPowerUpPickup: =>
-        return unless powerUp?
-        return unless @closeEnough(powerUp, height)
-        healthBar.increment()
-        powerUp.pickedUp = true
+        for p in powerUps when @closeEnough(p, @height)
+            healthBar.increment()
+            p.pickedUp = true
+            p.onPickup()
 
     thrustVisibility: (val) =>
         @thrustVisible = val and not @recovering
@@ -305,7 +317,7 @@ class Asteroid extends Drawable
         super
         hitter = null
         for b in bullets when @closeEnough(b, b.width + @radius)
-            b.exists(false)
+            b.onHit()
             hitter = b
             @gotHit = true
         if @gotHit
@@ -324,46 +336,108 @@ class Bullet extends Drawable
         @xForce = ship.xForce
         @yForce = ship.yForce
         @heading = ship.heading
-        @distanceRemaining = 50 * 60
+        @distanceRemaining = 3000
         @height = 25
         @width = 10
         @applyForce(thrust / 20)
 
     render: (c) =>
         c.fillStyle = "#FF0000"
-        c.fillRect(-@width / 2, -@height - 10, @width, @height)
+        c.fillRect(-@width / 2, -@height / 2 , @width, @height)
 
-    update: =>
-        @distanceRemaining -= super
+    update: => @distanceRemaining -= super
 
-    exists: (val = true) =>
-        @distanceRemaining = -1 unless val
-        @distanceRemaining > 0
+    exists: => @distanceRemaining > 0
 
+    onHit: => @distanceRemaining = -1
+
+
+class FireBall extends Drawable
+    sizes =
+        3: 32
+        2: 25
+        1: 20
+
+    constructor: (parent, @size = 3, nthChild = 0) ->
+        @x = parent.x
+        @y = parent.y
+        super(@x, @y)
+
+        @image = images.get("fireball")
+        if @size is 3
+            @heading = parent.heading
+            @xForce = parent.xForce
+            @yForce = parent.yForce
+            @applyForce(thrust / 20)
+        else
+            @heading += Math.PI / 4 if @size is 1
+            @heading += Math.PI / 2 * nthChild
+            @applyForce(.1)
+
+        @hit = false
+        @distanceRemaining = 10000
+
+        @width = sizes[@size]
+        scaling = @width / @image.width
+        @height = @image.height * scaling
+
+
+    render: (c) =>
+        c.drawImage(@image, -@width / 2, -@height / 2, @width, @height)
+
+    update: => @distanceRemaining -= super
+
+    exists: =>
+        return false if @hit
+        return true if @size is 3
+        return @distanceRemaining > 0
+
+    onHit: =>
+        @hit = true
+        return if @size is 1
+        bullets.push(new FireBall(@, @size - 1, i)) for i in [0...4]
 
 
 class PowerUp extends Drawable
-
-    constructor: ->
-        @image = images.get("mushroom")
-        @width = image.width / 9
-        @height = image.height / 9
-
-        super
-        @createTimeMs = new Date().getTime()
+    constructor: (imgName) ->
+        @image = images.get(imgName)
+        @setWidth(75)
+        super(null, null)
         @headingMatchesRotation = false
         @heading = Math.random() * 2 * Math.PI
         @applyForce(.05)
         @pickedUp = false
+        @createTimeMs = new Date().getTime()
 
     render: (c) =>
         c.drawImage(@image, -@width / 2, -@height / 2, @width, @height)
 
     lifetimeExceeded: () ->
-        (new Date().getTime() - @createTimeMs) > 10000
+        (new Date().getTime() - @createTimeMs) > 100000
 
     exists: =>
         not @pickedUp and not @lifetimeExceeded()
+
+    setWidth: (width) =>
+        @width = width
+        scaling = @width / @image.width
+        @height = @image.height * scaling
+
+
+
+class Mushroom extends PowerUp
+    constructor: ->
+        super "mushroom"
+
+    onPickup: -> healthBar.increment()
+
+
+class FireFlower extends PowerUp
+    constructor: ->
+        super "fireflower"
+        @setWidth(120)
+
+    onPickup: -> numFireFlowersPickedUp += 1
 
 
 class Star extends Drawable
@@ -400,6 +474,18 @@ class ImageLoader
 
     get: (name) => @imageMap[name]
 
+
+class Vec2
+    constructor: (@x = 0, @y = 0) ->
+
+
+    add: (other) =>
+        @x += other.x
+        @y += other.y
+
+    mult: (other) =>
+        @x *= other.x
+        @y *= other.y
 
 $ ->
     onLoad()
