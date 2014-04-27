@@ -53,12 +53,12 @@ gameInit = ->
     setInterval(draw, fpsToInterval(frameRate))
     bindControls(ship)
     $("#gameCanvas").click (evt) ->
-        x = evt.offsetX
-        y = evt.offsetY
-        dx = x - ship.x
-        dy = y - ship.y
-        ship.heading = Math.atan2(-dy, dx)
+        clickPos = new Vec2(evt.offsetX, evt.offsetY)
+        diff = clickPos.sub(ship.position)
+        ship.heading = Math.atan2(-diff.y, diff.x)
         ship.shoot()
+    $("#flower-btn").click -> numFireFlowersPickedUp += 1
+    $("#mushroom-btn").click -> healthBar.increment()
     #setInterval(ship.randomMove, 200)
 
 
@@ -131,70 +131,56 @@ bindControls = (ship) ->
 
 
 class Drawable
-    constructor: (@x, @y) ->
-        @x ?= Math.randInt(canvasWidth)
-        @y ?= Math.randInt(canvasHeight)
-        @xForce = 0
-        @yForce = 0
+    constructor: (x, y) ->
+        x ?= Math.randInt(canvasWidth)
+        y ?= Math.randInt(canvasHeight)
+        @position = new Vec2(x, y)
+        @force = new Vec2(0, 0)
         @heading = Math.PI / 2
         @rotation = @heading
         @headingMatchesRotation = true
-        @drag = 0
+        @drag = 1
 
     draw: =>
         @update(fpsToInterval(frameRate))
         xformCanvas (c) =>
-            c.translate(@x, @y)
+            c.translate(@position.x, @position.y)
             rot = if @headingMatchesRotation then @heading else @rotation
             c.rotate(-rot + Math.PI / 2)
             @render(c)
 
+    drawImage: (c, image) =>
+        c.drawImage(image, -@size.x / 2, -@size.y / 2, @size.x, @size.y)
+
     update: (dt) =>
-        @xForce -= @drag * @xForce
-        @yForce -= @drag * @yForce
-        newX = @x + @xForce * dt * updateCoefficient
-        newY = @y + @yForce * dt * updateCoefficient
-        dx = newX - @x
-        dy = newY - @y
-        distance = dx * dx + dy * dy
-        @x = newX
-        @y = newY
-        @x %= canvasWidth
-        @y %= canvasHeight
-        @x += canvasWidth if @x < 0
-        @y += canvasHeight if @y < 0
-        distance
+        @force = @force.scale(@drag)
+
+        newPos = @force.scale(dt * updateCoefficient).add(@position)
+
+        distance = @position.dist(newPos)
+        @position = newPos.wrap()
+
+        return distance
 
 
     applyForce: (magnitude) =>
-        @xForce += Math.cos(@heading) * magnitude
-        @yForce -= Math.sin(@heading) * magnitude
+        @force = @force.addPolar(magnitude, @heading)
 
-
-    checkCollision: (otherItems) =>
-        for e in otherItems when @closeEnough(e)
-            return true
-        return false
 
     closeEnough: (other, dist = 25) =>
-        dx = @x - other.x
-        dy = @y - other.y
-        dx * dx + dy * dy < dist * dist
+        @position.withinDist(other.position, dist)
 
 
 class Ship extends Drawable
 
     constructor: ->
         @image = images.get("ship")
-        @width = @image.width * .5
-        @height = @image.height * .5
+        @size = new Vec2(@image.width, @image.height).scale(.5)
         @thrustImg = images.get("ship-thrust")
 
-        @x = canvasWidth / 2
-        @y = canvasHeight / 2
-        super(@x, @y)
+        super(canvasWidth / 2, canvasHeight / 2)
 
-        @drag = .01
+        @drag = .99
         @recovering = false
         @thrustVisible = false
 
@@ -202,7 +188,7 @@ class Ship extends Drawable
         if @recovering
             c.globalAlpha = .4
         img = if @thrustVisible then @thrustImg else @image
-        c.drawImage(img, -@width / 2, -@height / 2, @width, @height)
+        @drawImage(c, img)
 
     applyThrust: =>
         @applyForce(thrust / 1000) unless @recovering
@@ -253,12 +239,13 @@ class Ship extends Drawable
         @thrustVisible = val and not @recovering
 
 
+
+
 class HealthBar
 
     height = 15
     constructor: (@maxHealth) ->
-        @x = 0
-        @y = canvasHeight - height
+        @position = new Vec2(0, canvasHeight - height)
         @setHealthLeft(@maxHealth)
 
     setHealthLeft: (health) =>
@@ -275,7 +262,7 @@ class HealthBar
     draw: =>
         xformCanvas (c) =>
             c.fillStyle = "#00FF00"
-            c.fillRect(@x, @y, @width, height)
+            c.fillRect(@position.x, @position.y, @width, height)
 
 
 
@@ -287,28 +274,22 @@ class Asteroid extends Drawable
         2: 50
         1: 100
 
-    constructor: (@size = 3, parent = null, hitter = null, first = false) ->
+    constructor: (@type = 3, parent = null, hitter = null, first = false) ->
         @image = images.get("asteroid")
-
-        @radius = (@size / 6 * @image.width) / 2
-        @xForce = 0
-        @yForce = 0
+        @size = new Vec2(@image.width, @image.height).scale(@type / 6)
+        @force = new Vec2(0, 0)
         if parent?
-            @x = parent.x
-            @y = parent.y
-            super(@x, @y)
+            super(parent.position.x, parent.position.y)
             @heading = hitter.heading + (if first then .2 else -0.2)
         else
-            @x = Math.randInt(canvasWidth)
-            @y = Math.randInt(canvasHeight)
-            super(@x, @y)
+            super(Math.randInt(canvasWidth), Math.randInt(canvasHeight))
             @heading = Math.random() * Math.PI * 2
 
         @applyForce(.1)
         @gotHit = false
 
     render: (c) =>
-        c.drawImage(@image, -@radius, -@radius, @radius * 2, @radius * 2)
+        @drawImage(c, @image)
 
     exists: =>
         not @gotHit
@@ -316,34 +297,30 @@ class Asteroid extends Drawable
     update: =>
         super
         hitter = null
-        for b in bullets when @closeEnough(b, b.width + @radius)
+        for b in bullets when @closeEnough(b, @size.x - 10)
             b.onHit()
             hitter = b
             @gotHit = true
         if @gotHit
-            score += scoreTable[@size]
+            score += scoreTable[@type]
             $("#scoreDisplay").text(score)
-            if @size > 1
-                asteroids.push(new Asteroid(@size - 1, @, hitter, false))
-                asteroids.push(new Asteroid(@size - 1, @, hitter, true))
+            if @type > 1
+                asteroids.push(new Asteroid(@type - 1, @, hitter, false))
+                asteroids.push(new Asteroid(@type - 1, @, hitter, true))
 
 
 class Bullet extends Drawable
     constructor: (ship) ->
-        @x = ship.x
-        @y = ship.y
-        super(@x, @y)
-        @xForce = ship.xForce
-        @yForce = ship.yForce
+        super(ship.position.x, ship.position.y)
+        @force = ship.force.copy()
         @heading = ship.heading
         @distanceRemaining = 3000
-        @height = 25
-        @width = 10
+        @size = new Vec2(10, 25)
         @applyForce(thrust / 20)
 
     render: (c) =>
         c.fillStyle = "#FF0000"
-        c.fillRect(-@width / 2, -@height / 2 , @width, @height)
+        c.fillRect(-@size.x / 2, -@size.y / 2 , @size.x, @size.y)
 
     update: => @distanceRemaining -= super
 
@@ -358,50 +335,48 @@ class FireBall extends Drawable
         2: 25
         1: 20
 
-    constructor: (parent, @size = 3, nthChild = 0) ->
-        @x = parent.x
-        @y = parent.y
-        super(@x, @y)
+    constructor: (parent, @type = 3, nthChild = 0) ->
+        super(parent.position.x, parent.position.y)
 
         @image = images.get("fireball")
-        if @size is 3
+        if @type is 3
             @heading = parent.heading
-            @xForce = parent.xForce
-            @yForce = parent.yForce
+            @force = parent.force.copy()
             @applyForce(thrust / 20)
         else
-            @heading += Math.PI / 4 if @size is 1
+            @heading += Math.PI / 4 if @type is 1
             @heading += Math.PI / 2 * nthChild
             @applyForce(.1)
 
         @hit = false
         @distanceRemaining = 10000
 
-        @width = sizes[@size]
-        scaling = @width / @image.width
-        @height = @image.height * scaling
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(sizes[@type])
+        @createTimeMs = new Date().getTime()
+
 
 
     render: (c) =>
-        c.drawImage(@image, -@width / 2, -@height / 2, @width, @height)
+        @drawImage(c, @image)
 
     update: => @distanceRemaining -= super
 
     exists: =>
         return false if @hit
-        return true if @size is 3
+        return true if @type is 3
         return @distanceRemaining > 0
 
     onHit: =>
+        return if (new Date().getTime() - @createTimeMs) < 500
         @hit = true
-        return if @size is 1
-        bullets.push(new FireBall(@, @size - 1, i)) for i in [0...4]
+        return if @type is 1
+        bullets.push(new FireBall(@, @type - 1, i)) for i in [0...4]
 
 
 class PowerUp extends Drawable
     constructor: (imgName) ->
         @image = images.get(imgName)
-        @setWidth(75)
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(75)
         super(null, null)
         @headingMatchesRotation = false
         @heading = Math.random() * 2 * Math.PI
@@ -410,18 +385,14 @@ class PowerUp extends Drawable
         @createTimeMs = new Date().getTime()
 
     render: (c) =>
-        c.drawImage(@image, -@width / 2, -@height / 2, @width, @height)
+        @drawImage(c, @image)
 
     lifetimeExceeded: () ->
-        (new Date().getTime() - @createTimeMs) > 100000
+        (new Date().getTime() - @createTimeMs) > 10000
 
     exists: =>
         not @pickedUp and not @lifetimeExceeded()
 
-    setWidth: (width) =>
-        @width = width
-        scaling = @width / @image.width
-        @height = @image.height * scaling
 
 
 
@@ -435,7 +406,7 @@ class Mushroom extends PowerUp
 class FireFlower extends PowerUp
     constructor: ->
         super "fireflower"
-        @setWidth(120)
+        @size = @size.scaleToWidth(120)
 
     onPickup: -> numFireFlowersPickedUp += 1
 
@@ -480,12 +451,43 @@ class Vec2
 
 
     add: (other) =>
-        @x += other.x
-        @y += other.y
+        new Vec2(@x + other.x, @y + other.y)
 
-    mult: (other) =>
-        @x *= other.x
-        @y *= other.y
+    sub: (other) =>
+        @add(other.scale(-1))
+
+    dotProd: (other) =>
+        new Vec2(@x * other.x, @y * other.y)
+
+    scale: (val) =>
+        new Vec2(@x * val, @y * val)
+
+    scaleToWidth: (newWidth) =>
+        @scale(newWidth / @x)
+
+    dist: (other) =>
+        delta = @sub(other)
+        product = delta.dotProd(delta)
+        product.x + product.y
+
+    wrap: =>
+        x = @x % canvasWidth
+        y = @y % canvasHeight
+        x += canvasWidth if @x < 0
+        y += canvasHeight if @y < 0
+        new Vec2(x, y)
+
+    withinDist: (other, dist) =>
+        @dist(other) < (dist * dist)
+
+
+    addPolar: (r, theta) =>
+        x = Math.cos(theta) * r + @x
+        y = -Math.sin(theta) * r + @y
+        new Vec2(x, y)
+
+    copy: =>
+        new Vec2(@x, @y)
 
 $ ->
     onLoad()

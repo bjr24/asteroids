@@ -83,14 +83,18 @@
     }
     setInterval(draw, fpsToInterval(frameRate));
     bindControls(ship);
-    return $("#gameCanvas").click(function(evt) {
-      var dx, dy, x, y;
-      x = evt.offsetX;
-      y = evt.offsetY;
-      dx = x - ship.x;
-      dy = y - ship.y;
-      ship.heading = Math.atan2(-dy, dx);
+    $("#gameCanvas").click(function(evt) {
+      var clickPos, diff;
+      clickPos = new Vec2(evt.offsetX, evt.offsetY);
+      diff = clickPos.sub(ship.position);
+      ship.heading = Math.atan2(-diff.y, diff.x);
       return ship.shoot();
+    });
+    $("#flower-btn").click(function() {
+      return numFireFlowersPickedUp += 1;
+    });
+    return $("#mushroom-btn").click(function() {
+      return healthBar.increment();
     });
   };
 
@@ -195,25 +199,23 @@
 
   Drawable = (function() {
     function Drawable(x, y) {
-      this.x = x;
-      this.y = y;
       this.closeEnough = __bind(this.closeEnough, this);
-      this.checkCollision = __bind(this.checkCollision, this);
       this.applyForce = __bind(this.applyForce, this);
       this.update = __bind(this.update, this);
+      this.drawImage = __bind(this.drawImage, this);
       this.draw = __bind(this.draw, this);
-      if (this.x == null) {
-        this.x = Math.randInt(canvasWidth);
+      if (x == null) {
+        x = Math.randInt(canvasWidth);
       }
-      if (this.y == null) {
-        this.y = Math.randInt(canvasHeight);
+      if (y == null) {
+        y = Math.randInt(canvasHeight);
       }
-      this.xForce = 0;
-      this.yForce = 0;
+      this.position = new Vec2(x, y);
+      this.force = new Vec2(0, 0);
       this.heading = Math.PI / 2;
       this.rotation = this.heading;
       this.headingMatchesRotation = true;
-      this.drag = 0;
+      this.drag = 1;
     }
 
     Drawable.prototype.draw = function() {
@@ -221,7 +223,7 @@
       return xformCanvas((function(_this) {
         return function(c) {
           var rot;
-          c.translate(_this.x, _this.y);
+          c.translate(_this.position.x, _this.position.y);
           rot = _this.headingMatchesRotation ? _this.heading : _this.rotation;
           c.rotate(-rot + Math.PI / 2);
           return _this.render(c);
@@ -229,52 +231,28 @@
       })(this));
     };
 
+    Drawable.prototype.drawImage = function(c, image) {
+      return c.drawImage(image, -this.size.x / 2, -this.size.y / 2, this.size.x, this.size.y);
+    };
+
     Drawable.prototype.update = function(dt) {
-      var distance, dx, dy, newX, newY;
-      this.xForce -= this.drag * this.xForce;
-      this.yForce -= this.drag * this.yForce;
-      newX = this.x + this.xForce * dt * updateCoefficient;
-      newY = this.y + this.yForce * dt * updateCoefficient;
-      dx = newX - this.x;
-      dy = newY - this.y;
-      distance = dx * dx + dy * dy;
-      this.x = newX;
-      this.y = newY;
-      this.x %= canvasWidth;
-      this.y %= canvasHeight;
-      if (this.x < 0) {
-        this.x += canvasWidth;
-      }
-      if (this.y < 0) {
-        this.y += canvasHeight;
-      }
+      var distance, newPos;
+      this.force = this.force.scale(this.drag);
+      newPos = this.force.scale(dt * updateCoefficient).add(this.position);
+      distance = this.position.dist(newPos);
+      this.position = newPos.wrap();
       return distance;
     };
 
     Drawable.prototype.applyForce = function(magnitude) {
-      this.xForce += Math.cos(this.heading) * magnitude;
-      return this.yForce -= Math.sin(this.heading) * magnitude;
-    };
-
-    Drawable.prototype.checkCollision = function(otherItems) {
-      var e, _i, _len;
-      for (_i = 0, _len = otherItems.length; _i < _len; _i++) {
-        e = otherItems[_i];
-        if (this.closeEnough(e)) {
-          return true;
-        }
-      }
-      return false;
+      return this.force = this.force.addPolar(magnitude, this.heading);
     };
 
     Drawable.prototype.closeEnough = function(other, dist) {
-      var dx, dy;
       if (dist == null) {
         dist = 25;
       }
-      dx = this.x - other.x;
-      dy = this.y - other.y;
-      return dx * dx + dy * dy < dist * dist;
+      return this.position.withinDist(other.position, dist);
     };
 
     return Drawable;
@@ -297,13 +275,10 @@
       this.rotateLeft = __bind(this.rotateLeft, this);
       this.applyThrust = __bind(this.applyThrust, this);
       this.image = images.get("ship");
-      this.width = this.image.width * .5;
-      this.height = this.image.height * .5;
+      this.size = new Vec2(this.image.width, this.image.height).scale(.5);
       this.thrustImg = images.get("ship-thrust");
-      this.x = canvasWidth / 2;
-      this.y = canvasHeight / 2;
-      Ship.__super__.constructor.call(this, this.x, this.y);
-      this.drag = .01;
+      Ship.__super__.constructor.call(this, canvasWidth / 2, canvasHeight / 2);
+      this.drag = .99;
       this.recovering = false;
       this.thrustVisible = false;
     }
@@ -314,7 +289,7 @@
         c.globalAlpha = .4;
       }
       img = this.thrustVisible ? this.thrustImg : this.image;
-      return c.drawImage(img, -this.width / 2, -this.height / 2, this.width, this.height);
+      return this.drawImage(c, img);
     };
 
     Ship.prototype.applyThrust = function() {
@@ -415,8 +390,7 @@
       this.increment = __bind(this.increment, this);
       this.decrement = __bind(this.decrement, this);
       this.setHealthLeft = __bind(this.setHealthLeft, this);
-      this.x = 0;
-      this.y = canvasHeight - height;
+      this.position = new Vec2(0, canvasHeight - height);
       this.setHealthLeft(this.maxHealth);
     }
 
@@ -440,7 +414,7 @@
       return xformCanvas((function(_this) {
         return function(c) {
           c.fillStyle = "#00FF00";
-          return c.fillRect(_this.x, _this.y, _this.width, height);
+          return c.fillRect(_this.position.x, _this.position.y, _this.width, height);
         };
       })(this));
     };
@@ -460,8 +434,8 @@
       1: 100
     };
 
-    function Asteroid(size, parent, hitter, first) {
-      this.size = size != null ? size : 3;
+    function Asteroid(type, parent, hitter, first) {
+      this.type = type != null ? type : 3;
       if (parent == null) {
         parent = null;
       }
@@ -475,18 +449,13 @@
       this.exists = __bind(this.exists, this);
       this.render = __bind(this.render, this);
       this.image = images.get("asteroid");
-      this.radius = (this.size / 6 * this.image.width) / 2;
-      this.xForce = 0;
-      this.yForce = 0;
+      this.size = new Vec2(this.image.width, this.image.height).scale(this.type / 6);
+      this.force = new Vec2(0, 0);
       if (parent != null) {
-        this.x = parent.x;
-        this.y = parent.y;
-        Asteroid.__super__.constructor.call(this, this.x, this.y);
+        Asteroid.__super__.constructor.call(this, parent.position.x, parent.position.y);
         this.heading = hitter.heading + (first ? .2 : -0.2);
       } else {
-        this.x = Math.randInt(canvasWidth);
-        this.y = Math.randInt(canvasHeight);
-        Asteroid.__super__.constructor.call(this, this.x, this.y);
+        Asteroid.__super__.constructor.call(this, Math.randInt(canvasWidth), Math.randInt(canvasHeight));
         this.heading = Math.random() * Math.PI * 2;
       }
       this.applyForce(.1);
@@ -494,7 +463,7 @@
     }
 
     Asteroid.prototype.render = function(c) {
-      return c.drawImage(this.image, -this.radius, -this.radius, this.radius * 2, this.radius * 2);
+      return this.drawImage(c, this.image);
     };
 
     Asteroid.prototype.exists = function() {
@@ -507,7 +476,7 @@
       hitter = null;
       for (_i = 0, _len = bullets.length; _i < _len; _i++) {
         b = bullets[_i];
-        if (!(this.closeEnough(b, b.width + this.radius))) {
+        if (!(this.closeEnough(b, this.size.x - 10))) {
           continue;
         }
         b.onHit();
@@ -515,11 +484,11 @@
         this.gotHit = true;
       }
       if (this.gotHit) {
-        score += scoreTable[this.size];
+        score += scoreTable[this.type];
         $("#scoreDisplay").text(score);
-        if (this.size > 1) {
-          asteroids.push(new Asteroid(this.size - 1, this, hitter, false));
-          return asteroids.push(new Asteroid(this.size - 1, this, hitter, true));
+        if (this.type > 1) {
+          asteroids.push(new Asteroid(this.type - 1, this, hitter, false));
+          return asteroids.push(new Asteroid(this.type - 1, this, hitter, true));
         }
       }
     };
@@ -536,21 +505,17 @@
       this.exists = __bind(this.exists, this);
       this.update = __bind(this.update, this);
       this.render = __bind(this.render, this);
-      this.x = ship.x;
-      this.y = ship.y;
-      Bullet.__super__.constructor.call(this, this.x, this.y);
-      this.xForce = ship.xForce;
-      this.yForce = ship.yForce;
+      Bullet.__super__.constructor.call(this, ship.position.x, ship.position.y);
+      this.force = ship.force.copy();
       this.heading = ship.heading;
       this.distanceRemaining = 3000;
-      this.height = 25;
-      this.width = 10;
+      this.size = new Vec2(10, 25);
       this.applyForce(thrust / 20);
     }
 
     Bullet.prototype.render = function(c) {
       c.fillStyle = "#FF0000";
-      return c.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+      return c.fillRect(-this.size.x / 2, -this.size.y / 2, this.size.x, this.size.y);
     };
 
     Bullet.prototype.update = function() {
@@ -580,9 +545,8 @@
       1: 20
     };
 
-    function FireBall(parent, size, nthChild) {
-      var scaling;
-      this.size = size != null ? size : 3;
+    function FireBall(parent, type, nthChild) {
+      this.type = type != null ? type : 3;
       if (nthChild == null) {
         nthChild = 0;
       }
@@ -590,17 +554,14 @@
       this.exists = __bind(this.exists, this);
       this.update = __bind(this.update, this);
       this.render = __bind(this.render, this);
-      this.x = parent.x;
-      this.y = parent.y;
-      FireBall.__super__.constructor.call(this, this.x, this.y);
+      FireBall.__super__.constructor.call(this, parent.position.x, parent.position.y);
       this.image = images.get("fireball");
-      if (this.size === 3) {
+      if (this.type === 3) {
         this.heading = parent.heading;
-        this.xForce = parent.xForce;
-        this.yForce = parent.yForce;
+        this.force = parent.force.copy();
         this.applyForce(thrust / 20);
       } else {
-        if (this.size === 1) {
+        if (this.type === 1) {
           this.heading += Math.PI / 4;
         }
         this.heading += Math.PI / 2 * nthChild;
@@ -608,13 +569,12 @@
       }
       this.hit = false;
       this.distanceRemaining = 10000;
-      this.width = sizes[this.size];
-      scaling = this.width / this.image.width;
-      this.height = this.image.height * scaling;
+      this.size = new Vec2(this.image.width, this.image.height).scaleToWidth(sizes[this.type]);
+      this.createTimeMs = new Date().getTime();
     }
 
     FireBall.prototype.render = function(c) {
-      return c.drawImage(this.image, -this.width / 2, -this.height / 2, this.width, this.height);
+      return this.drawImage(c, this.image);
     };
 
     FireBall.prototype.update = function() {
@@ -625,7 +585,7 @@
       if (this.hit) {
         return false;
       }
-      if (this.size === 3) {
+      if (this.type === 3) {
         return true;
       }
       return this.distanceRemaining > 0;
@@ -633,13 +593,16 @@
 
     FireBall.prototype.onHit = function() {
       var i, _i, _results;
+      if ((new Date().getTime() - this.createTimeMs) < 500) {
+        return;
+      }
       this.hit = true;
-      if (this.size === 1) {
+      if (this.type === 1) {
         return;
       }
       _results = [];
       for (i = _i = 0; _i < 4; i = ++_i) {
-        _results.push(bullets.push(new FireBall(this, this.size - 1, i)));
+        _results.push(bullets.push(new FireBall(this, this.type - 1, i)));
       }
       return _results;
     };
@@ -652,11 +615,10 @@
     __extends(PowerUp, _super);
 
     function PowerUp(imgName) {
-      this.setWidth = __bind(this.setWidth, this);
       this.exists = __bind(this.exists, this);
       this.render = __bind(this.render, this);
       this.image = images.get(imgName);
-      this.setWidth(75);
+      this.size = new Vec2(this.image.width, this.image.height).scaleToWidth(75);
       PowerUp.__super__.constructor.call(this, null, null);
       this.headingMatchesRotation = false;
       this.heading = Math.random() * 2 * Math.PI;
@@ -666,22 +628,15 @@
     }
 
     PowerUp.prototype.render = function(c) {
-      return c.drawImage(this.image, -this.width / 2, -this.height / 2, this.width, this.height);
+      return this.drawImage(c, this.image);
     };
 
     PowerUp.prototype.lifetimeExceeded = function() {
-      return (new Date().getTime() - this.createTimeMs) > 100000;
+      return (new Date().getTime() - this.createTimeMs) > 10000;
     };
 
     PowerUp.prototype.exists = function() {
       return !this.pickedUp && !this.lifetimeExceeded();
-    };
-
-    PowerUp.prototype.setWidth = function(width) {
-      var scaling;
-      this.width = width;
-      scaling = this.width / this.image.width;
-      return this.height = this.image.height * scaling;
     };
 
     return PowerUp;
@@ -708,7 +663,7 @@
 
     function FireFlower() {
       FireFlower.__super__.constructor.call(this, "fireflower");
-      this.setWidth(120);
+      this.size = this.size.scaleToWidth(120);
     }
 
     FireFlower.prototype.onPickup = function() {
@@ -796,18 +751,71 @@
     function Vec2(x, y) {
       this.x = x != null ? x : 0;
       this.y = y != null ? y : 0;
-      this.mult = __bind(this.mult, this);
+      this.copy = __bind(this.copy, this);
+      this.addPolar = __bind(this.addPolar, this);
+      this.withinDist = __bind(this.withinDist, this);
+      this.wrap = __bind(this.wrap, this);
+      this.dist = __bind(this.dist, this);
+      this.scaleToWidth = __bind(this.scaleToWidth, this);
+      this.scale = __bind(this.scale, this);
+      this.dotProd = __bind(this.dotProd, this);
+      this.sub = __bind(this.sub, this);
       this.add = __bind(this.add, this);
     }
 
     Vec2.prototype.add = function(other) {
-      this.x += other.x;
-      return this.y += other.y;
+      return new Vec2(this.x + other.x, this.y + other.y);
     };
 
-    Vec2.prototype.mult = function(other) {
-      this.x *= other.x;
-      return this.y *= other.y;
+    Vec2.prototype.sub = function(other) {
+      return this.add(other.scale(-1));
+    };
+
+    Vec2.prototype.dotProd = function(other) {
+      return new Vec2(this.x * other.x, this.y * other.y);
+    };
+
+    Vec2.prototype.scale = function(val) {
+      return new Vec2(this.x * val, this.y * val);
+    };
+
+    Vec2.prototype.scaleToWidth = function(newWidth) {
+      return this.scale(newWidth / this.x);
+    };
+
+    Vec2.prototype.dist = function(other) {
+      var delta, product;
+      delta = this.sub(other);
+      product = delta.dotProd(delta);
+      return product.x + product.y;
+    };
+
+    Vec2.prototype.wrap = function() {
+      var x, y;
+      x = this.x % canvasWidth;
+      y = this.y % canvasHeight;
+      if (this.x < 0) {
+        x += canvasWidth;
+      }
+      if (this.y < 0) {
+        y += canvasHeight;
+      }
+      return new Vec2(x, y);
+    };
+
+    Vec2.prototype.withinDist = function(other, dist) {
+      return this.dist(other) < (dist * dist);
+    };
+
+    Vec2.prototype.addPolar = function(r, theta) {
+      var x, y;
+      x = Math.cos(theta) * r + this.x;
+      y = -Math.sin(theta) * r + this.y;
+      return new Vec2(x, y);
+    };
+
+    Vec2.prototype.copy = function() {
+      return new Vec2(this.x, this.y);
     };
 
     return Vec2;
