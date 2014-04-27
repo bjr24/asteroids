@@ -4,6 +4,7 @@ canvasHeight = 0
 frameRate = 20
 thrust = 5
 updateCoefficient = 1
+images = null
 
 ship = null
 bullets = []
@@ -13,12 +14,21 @@ healthBar = null
 powerUp = null
 score = 0
 
-
-gameInit = ->
+onLoad = ->
+    imgBaseUrl = ""
+    images = new ImageLoader [
+        { name: "asteroid", url: imgBaseUrl + "asteroid-img.png" }
+        { name: "ship-thrust", url: imgBaseUrl + "spaceship-thrust.gif" }
+        { name: "ship", url: imgBaseUrl + "spaceship-no-thrust.gif" }
+        { name: "mushroom", url: imgBaseUrl + "mushroom.png" }
+    ]
+    images.onLoad(gameInit)
     canvas = $("#gameCanvas")[0].getContext("2d")
     canvasWidth = $("#gameCanvas").width()
     canvasHeight = $("#gameCanvas").height()
 
+
+gameInit = ->
     healthBar = new HealthBar(10)
     ship = new Ship()
 
@@ -96,14 +106,16 @@ bindControls = (ship) ->
             when 39, 88 then ship.rotateRight
         # up arrow key
             when 38, 188
-                ship.showThrust()
+                ship.thrustVisibility(true)
                 ship.applyThrust
 
         keyIntervalIds[evt.keyCode] = setInterval(action, 50)
 
     window.onkeyup = (evt) ->
-        clearInterval(keyIntervalIds[evt.keyCode])
-        keyIntervalIds[evt.keyCode] = null
+        keyCode = evt.keyCode
+        clearInterval(keyIntervalIds[keyCode])
+        keyIntervalIds[keyCode] = null
+        ship.thrustVisibility(false) if keyCode is 38 or keyCode is 188
 
     window.onkeypress = (evt) ->
         #spacebar
@@ -165,26 +177,26 @@ class Drawable
 
 
 class Ship extends Drawable
-    width = 0
-    height = 0
-    image = new Image()
-    image.onload = ->
-        width = image.width * .5
-        height = image.height * .5
-    image.src = "spaceship-thrust.gif"
-    #image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
 
     constructor: ->
+        @image = images.get("ship")
+        @width = @image.width * .5
+        @height = @image.height * .5
+        @thrustImg = images.get("ship-thrust")
+
         @x = canvasWidth / 2
         @y = canvasHeight / 2
         super(@x, @y)
+
         @drag = .01
         @recovering = false
+        @thrustVisible = false
 
     render: (c) ->
         if @recovering
             c.globalAlpha = .4
-        c.drawImage(image, -width / 2, -height / 2, width, height)
+        img = if @thrustVisible then @thrustImg else @image
+        c.drawImage(img, -@width / 2, -@height / 2, @width, @height)
 
     applyThrust: =>
         @applyForce(thrust / 1000) unless @recovering
@@ -214,6 +226,7 @@ class Ship extends Drawable
         if (asteroids.some (a) => @closeEnough(a, a.radius))
             healthBar.decrement()
             @recovering = true
+            @thrustVisibility(false)
             setTimeout (=>
                 @recovering = false
             ), 2000
@@ -224,7 +237,9 @@ class Ship extends Drawable
         healthBar.increment()
         powerUp.pickedUp = true
 
-    showThrust: ->
+    thrustVisibility: (val) =>
+        @thrustVisible = val and not @recovering
+
 
 class HealthBar
 
@@ -254,12 +269,6 @@ class HealthBar
 
 
 class Asteroid extends Drawable
-    imageWidth = 154
-    image = new Image()
-    image.onload = ->
-        imageWidth = image.width
-    #image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/asteroid-img.png";
-    image.src = "asteroid-img.png"
 
     scoreTable =
         3: 20
@@ -267,7 +276,9 @@ class Asteroid extends Drawable
         1: 100
 
     constructor: (@size = 3, parent = null, hitter = null, first = false) ->
-        @radius = (@size / 6 * imageWidth) / 2
+        @image = images.get("asteroid")
+
+        @radius = (@size / 6 * @image.width) / 2
         @xForce = 0
         @yForce = 0
         if parent?
@@ -285,7 +296,7 @@ class Asteroid extends Drawable
         @gotHit = false
 
     render: (c) =>
-        c.drawImage(image, -@radius, -@radius, @radius * 2, @radius * 2)
+        c.drawImage(@image, -@radius, -@radius, @radius * 2, @radius * 2)
 
     exists: =>
         not @gotHit
@@ -332,15 +343,12 @@ class Bullet extends Drawable
 
 
 class PowerUp extends Drawable
-    width = 0
-    height = 0
-    image = new Image()
-    image.onload = ->
-        width = image.width / 9
-        height = image.height / 9
-    image.src = "mushroom.png"
 
     constructor: ->
+        @image = images.get("mushroom")
+        @width = image.width / 9
+        @height = image.height / 9
+
         super
         @createTimeMs = new Date().getTime()
         @headingMatchesRotation = false
@@ -349,7 +357,7 @@ class PowerUp extends Drawable
         @pickedUp = false
 
     render: (c) =>
-        c.drawImage(image, -width / 2, -height / 2, width, height)
+        c.drawImage(@image, -@width / 2, -@height / 2, @width, @height)
 
     lifetimeExceeded: () ->
         (new Date().getTime() - @createTimeMs) > 10000
@@ -371,11 +379,30 @@ Math.randInt = (a, b = null) ->
     range = b - a
     a + Math.floor(Math.random() * range)
 
+class ImageLoader
+    constructor: (@imageReqs) ->
+        @imageMap = {}
+        @numLoaded = 0
+        @totalNumImages = @imageReqs.length
+        for req in @imageReqs
+            image = new Image()
+            image.onload = => @numLoaded += 1
+            image.src = req.url
+            @imageMap[req.name] = image
 
+    onLoad: (callBack) =>
+        if @numLoaded < @totalNumImages
+            setTimeout (=>
+                @onLoad(callBack)
+            ), 10
+            return
+        callBack()
+
+    get: (name) => @imageMap[name]
 
 
 $ ->
-    gameInit()
+    onLoad()
 
 
 
