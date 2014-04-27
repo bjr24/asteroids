@@ -49,7 +49,16 @@
       stars.push(new Star());
     }
     setInterval(draw, fpsToInterval(frameRate));
-    return bindControls(ship);
+    bindControls(ship);
+    return $("#gameCanvas").click(function(evt) {
+      var dx, dy, x, y;
+      x = evt.offsetX;
+      y = evt.offsetY;
+      dx = x - ship.x;
+      dy = y - ship.y;
+      ship.heading = Math.atan2(-dy, dx);
+      return ship.shoot();
+    });
   };
 
   draw = function() {
@@ -120,10 +129,14 @@
       action = (function() {
         switch (evt.keyCode) {
           case 37:
+          case 90:
             return ship.rotateLeft;
           case 39:
+          case 88:
             return ship.rotateRight;
           case 38:
+          case 188:
+            ship.showThrust();
             return ship.applyThrust;
         }
       })();
@@ -134,7 +147,7 @@
       return keyIntervalIds[evt.keyCode] = null;
     };
     return window.onkeypress = function(evt) {
-      if (evt.keyCode === 32) {
+      if (evt.keyCode === 32 || evt.keyCode === 46) {
         evt.preventDefault();
         return ship.shoot();
       }
@@ -245,7 +258,7 @@
       return height = image.height * .5;
     };
 
-    image.src = "spaceship.gif";
+    image.src = "spaceship-thrust.gif";
 
     function Ship() {
       this.checkPowerUpPickup = __bind(this.checkPowerUpPickup, this);
@@ -337,6 +350,8 @@
       healthBar.increment();
       return powerUp.pickedUp = true;
     };
+
+    Ship.prototype.showThrust = function() {};
 
     return Ship;
 

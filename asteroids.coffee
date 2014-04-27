@@ -36,6 +36,13 @@ gameInit = ->
 
     setInterval(draw, fpsToInterval(frameRate))
     bindControls(ship)
+    $("#gameCanvas").click (evt) ->
+        x = evt.offsetX
+        y = evt.offsetY
+        dx = x - ship.x
+        dy = y - ship.y
+        ship.heading = Math.atan2(-dy, dx)
+        ship.shoot()
 #setInterval(ship.randomMove, 200)
 
 
@@ -84,11 +91,13 @@ bindControls = (ship) ->
         return if keyIntervalIds[evt.keyCode]?
         action = switch evt.keyCode
         # left arrow key
-            when 37 then ship.rotateLeft
+            when 37, 90 then ship.rotateLeft
         # right arrow key
-            when 39 then ship.rotateRight
+            when 39, 88 then ship.rotateRight
         # up arrow key
-            when 38 then ship.applyThrust
+            when 38, 188
+                ship.showThrust()
+                ship.applyThrust
 
         keyIntervalIds[evt.keyCode] = setInterval(action, 50)
 
@@ -97,7 +106,8 @@ bindControls = (ship) ->
         keyIntervalIds[evt.keyCode] = null
 
     window.onkeypress = (evt) ->
-        if evt.keyCode is 32 #spacebar
+        #spacebar
+        if evt.keyCode is 32 or evt.keyCode is 46
             evt.preventDefault()
             ship.shoot()
 
@@ -161,7 +171,7 @@ class Ship extends Drawable
     image.onload = ->
         width = image.width * .5
         height = image.height * .5
-    image.src = "spaceship.gif"
+    image.src = "spaceship-thrust.gif"
     #image.src = "https://raw.githubusercontent.com/bjr24/asteroids/master/spaceship.gif";
 
     constructor: ->
@@ -213,6 +223,8 @@ class Ship extends Drawable
         return unless @closeEnough(powerUp, height)
         healthBar.increment()
         powerUp.pickedUp = true
+
+    showThrust: ->
 
 class HealthBar
 
@@ -358,6 +370,8 @@ Math.randInt = (a, b = null) ->
     [a, b] = [0, a] if not b?
     range = b - a
     a + Math.floor(Math.random() * range)
+
+
 
 
 $ ->
