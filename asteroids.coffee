@@ -18,12 +18,19 @@ numFireFlowersPickedUp = 0
 onLoad = ->
     imgBaseUrl = ""
     images = new ImageLoader [
-        { name: "asteroid", url: imgBaseUrl + "asteroid-img.png" }
-        { name: "ship-thrust", url: imgBaseUrl + "spaceship-thrust.gif" }
-        { name: "ship", url: imgBaseUrl + "spaceship-no-thrust.gif" }
-        { name: "mushroom", url: imgBaseUrl + "mushroom.png" }
-        { name: "fireflower", url: imgBaseUrl + "fireflower.gif" }
-        { name: "fireball", url: imgBaseUrl + "fireball.png" }
+        { name: "asteroid", url: imgBaseUrl + "img/asteroid-img.png" }
+        { name: "ship-thrust", url: imgBaseUrl + "img/spaceship-thrust.gif" }
+        { name: "ship", url: imgBaseUrl + "img/spaceship-no-thrust.gif" }
+        { name: "mushroom", url: imgBaseUrl + "img/mushroom.png" }
+        { name: "fireflower", url: imgBaseUrl + "img/fireflower.gif" }
+        { name: "fireball", url: imgBaseUrl + "img/fireball.png" }
+        { name: "star", url: imgBaseUrl + "img/star.png" }
+        { name: "invin1", url: imgBaseUrl + "img/invincible-ship/ship1.gif" }
+        { name: "invin2", url: imgBaseUrl + "img/invincible-ship/ship2.gif" }
+        { name: "invin3", url: imgBaseUrl + "img/invincible-ship/ship3.gif" }
+        { name: "invin4", url: imgBaseUrl + "img/invincible-ship/ship4.gif" }
+        { name: "invin5", url: imgBaseUrl + "img/invincible-ship/ship5.gif" }
+
     ]
     images.onLoad(gameInit)
     canvas = $("#gameCanvas")[0].getContext("2d")
@@ -44,9 +51,9 @@ gameInit = ->
 
     powerUps.push(new Mushroom())
     powerUps.push(new FireFlower())
-    setInterval (->
-        powerUps.push(new FireFlower())
-    ), 30000
+    powerUps.push(new StarPowerUp())
+    setInterval(spawnPowerup, 30000)
+
 
     stars.push(new Star()) for i in [0...30]
 
@@ -57,20 +64,20 @@ gameInit = ->
         diff = clickPos.sub(ship.position)
         ship.heading = Math.atan2(-diff.y, diff.x)
         ship.shoot()
-    $("#flower-btn").click -> numFireFlowersPickedUp += 1
-    $("#mushroom-btn").click -> healthBar.increment()
+    $("#flower-btn").click -> new FireFlower().onPickup()
+    $("#mushroom-btn").click -> new Mushroom().onPickup()
+    $("#star-btn").click -> new StarPowerUp().onPickup()
     #setInterval(ship.randomMove, 200)
 
 
 draw = ->
     drawBackground()
     ship.draw()
-    bullets = bullets.filter (b) ->
-        b.exists()
+
+    bullets = bullets.filter (b) -> b.exists()
     b.draw() for b in bullets
 
-    asteroids = asteroids.filter (a) ->
-        a.exists()
+    asteroids = asteroids.filter (a) -> a.exists()
     $("#asteroidCount").text(asteroids.length)
     a.draw() for a in asteroids
 
@@ -130,6 +137,18 @@ bindControls = (ship) ->
             ship.shoot()
 
 
+powerUpCounter = 0
+spawnPowerup = () ->
+    powerUp = switch powerUpCounter
+        when 0 then new Mushroom()
+        when 1 then new FireFlower()
+        when 2 then new StarPowerUp()
+    powerUps.push(powerUp)
+    powerUpCounter = (powerUpCounter + 1) % 3
+
+
+
+
 class Drawable
     constructor: (x, y) ->
         x ?= Math.randInt(canvasWidth)
@@ -177,6 +196,16 @@ class Ship extends Drawable
         @image = images.get("ship")
         @size = new Vec2(@image.width, @image.height).scale(.5)
         @thrustImg = images.get("ship-thrust")
+        @invinImgs = [
+            images.get("invin1")
+            images.get("invin2")
+            images.get("invin3")
+            images.get("invin4")
+            images.get("invin5")
+        ]
+        @invinCount = 0
+        @isInvin = false
+        @invinAlmostOver = false
 
         super(canvasWidth / 2, canvasHeight / 2)
 
@@ -185,9 +214,13 @@ class Ship extends Drawable
         @thrustVisible = false
 
     render: (c) ->
-        if @recovering
+        if @recovering or @invinAlmostOver
             c.globalAlpha = .4
-        img = if @thrustVisible then @thrustImg else @image
+        if @isInvin and not @invinAlmostOver
+            img = @invinImgs[@invinCount]
+            @invinCount = (@invinCount + 1) % 5
+        else
+            img = if @thrustVisible then @thrustImg else @image
         @drawImage(c, img)
 
     applyThrust: =>
@@ -217,17 +250,23 @@ class Ship extends Drawable
     update: =>
         super
         return if @recovering
-        @checkAsteroidCollision()
+        if @isInvin
+            @checkInvinAsteroidCollision()
+        else
+            @checkAnyAsteroidCollision()
         @checkPowerUpPickup()
 
-    checkAsteroidCollision: =>
-        if (asteroids.some (a) => @closeEnough(a, a.radius))
+    checkAnyAsteroidCollision: =>
+        if (asteroids.some (a) => @closeEnough(a, a.size.x))
             healthBar.decrement()
             @recovering = true
             @thrustVisibility(false)
             setTimeout (=>
                 @recovering = false
             ), 2000
+
+    checkInvinAsteroidCollision: =>
+        a.onHit(@) for a in asteroids when @closeEnough(a, a.size.x)
 
     checkPowerUpPickup: =>
         for p in powerUps when @closeEnough(p, @height)
@@ -237,6 +276,13 @@ class Ship extends Drawable
 
     thrustVisibility: (val) =>
         @thrustVisible = val and not @recovering
+
+    setInvin: (val) =>
+        @isInvin = val
+        @recovering = false
+        @invinAlmostOver = false
+
+
 
 
 
@@ -301,12 +347,15 @@ class Asteroid extends Drawable
             b.onHit()
             hitter = b
             @gotHit = true
-        if @gotHit
-            score += scoreTable[@type]
-            $("#scoreDisplay").text(score)
-            if @type > 1
-                asteroids.push(new Asteroid(@type - 1, @, hitter, false))
-                asteroids.push(new Asteroid(@type - 1, @, hitter, true))
+        @onHit(hitter) if @gotHit
+
+    onHit: (hitter) =>
+        @gotHit = true
+        score += scoreTable[@type]
+        $("#scoreDisplay").text(score)
+        if @type > 1
+            asteroids.push(new Asteroid(@type - 1, @, hitter, false))
+            asteroids.push(new Asteroid(@type - 1, @, hitter, true))
 
 
 class Bullet extends Drawable
@@ -376,7 +425,7 @@ class FireBall extends Drawable
 class PowerUp extends Drawable
     constructor: (imgName) ->
         @image = images.get(imgName)
-        @size = new Vec2(@image.width, @image.height).scaleToWidth(75)
+        @size = new Vec2(@image.width, @image.height)
         super(null, null)
         @headingMatchesRotation = false
         @heading = Math.random() * 2 * Math.PI
@@ -395,28 +444,46 @@ class PowerUp extends Drawable
 
 
 
-
 class Mushroom extends PowerUp
     constructor: ->
-        super "mushroom"
+        super("mushroom")
+        @size = @size.scaleToWidth(75)
 
     onPickup: -> healthBar.increment()
 
 
 class FireFlower extends PowerUp
     constructor: ->
-        super "fireflower"
+        super("fireflower")
         @size = @size.scaleToWidth(120)
 
     onPickup: -> numFireFlowersPickedUp += 1
 
 
-class Star extends Drawable
+class StarPowerUp extends PowerUp
+    constructor: ->
+        super("star")
+        @size = @size.scaleToWidth(38)
 
+    onPickup: ->
+        ship.setInvin(true)
+        setTimeout ( ->
+            ship.invinAlmostOver = true
+        ), 20000
+
+        setTimeout ( ->
+            ship.setInvin(false)
+        ), 25000
+
+
+class Star extends Drawable
     render: (c) =>
         c.fillStyle = "#FFFFFF"
         c.fillRect(0, -1, 1, 3)
         c.fillRect(-1, 1, 3, 1)
+
+
+
 
 
 Math.randInt = (a, b = null) ->
