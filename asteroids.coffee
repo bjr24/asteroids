@@ -13,6 +13,7 @@ stars = []
 healthBar = null
 powerUps = []
 score = 0
+hits = 0
 numFireFlowersPickedUp = 0
 
 onLoad = ->
@@ -30,6 +31,7 @@ onLoad = ->
         { name: "invin3", url: imgBaseUrl + "img/invincible-ship/ship3.gif" }
         { name: "invin4", url: imgBaseUrl + "img/invincible-ship/ship4.gif" }
         { name: "invin5", url: imgBaseUrl + "img/invincible-ship/ship5.gif" }
+        { name: "green-shell", url: imgBaseUrl + "img/green-shell.png" }
 
     ]
     images.onLoad(gameInit)
@@ -316,13 +318,20 @@ class HealthBar
 class Asteroid extends Drawable
 
     scoreTable =
-        3: 20
-        2: 50
         1: 100
+        2: 50
+        3: 20
+
+    sizeTable =
+        1: 30
+        2: 50
+        3: 70
 
     constructor: (@type = 3, parent = null, hitter = null, first = false) ->
-        @image = images.get("asteroid")
-        @size = new Vec2(@image.width, @image.height).scale(@type / 6)
+        #@image = images.get("asteroid")
+        @image = images.get("green-shell")
+        #@size = new Vec2(@image.width, @image.height).scale(@type / 6)
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(sizeTable[@type])
         @force = new Vec2(0, 0)
         if parent?
             super(parent.position.x, parent.position.y)
@@ -331,6 +340,8 @@ class Asteroid extends Drawable
             super(Math.randInt(canvasWidth), Math.randInt(canvasHeight))
             @heading = Math.random() * Math.PI * 2
 
+        @headingMatchesRotation = false
+        @rotation = Math.PI / 2
         @applyForce(.1)
         @gotHit = false
 
@@ -343,7 +354,7 @@ class Asteroid extends Drawable
     update: =>
         super
         hitter = null
-        for b in bullets when @closeEnough(b, @size.x - 10)
+        for b in bullets when @closeEnough(b, @size.x)
             b.onHit()
             hitter = b
             @gotHit = true
@@ -353,6 +364,8 @@ class Asteroid extends Drawable
         @gotHit = true
         score += scoreTable[@type]
         $("#scoreDisplay").text(score)
+        hits += 1
+        $("#hitsDisplay").text(hits)
         if @type > 1
             asteroids.push(new Asteroid(@type - 1, @, hitter, false))
             asteroids.push(new Asteroid(@type - 1, @, hitter, true))
