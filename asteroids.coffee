@@ -14,6 +14,7 @@ healthBar = null
 powerUps = []
 coins = []
 bulletBills = []
+questionBlocks = []
 score = 0
 hits = 0
 numFireFlowersPickedUp = 0
@@ -36,6 +37,7 @@ onLoad = ->
         { name: "green-shell", url: imgBaseUrl + "img/green-shell.png" }
         { name: "coin", url: imgBaseUrl + "img/coin.png" }
         { name: "bulletbill", url: imgBaseUrl + "img/bulletbill.png" }
+        { name: "question-block", url: imgBaseUrl + "img/question-block.png" }
 
     ]
     images.onLoad(gameInit)
@@ -55,15 +57,14 @@ gameInit = ->
     ), 5000
 
 
-    powerUps.push(new Mushroom())
-    powerUps.push(new FireFlower())
-    powerUps.push(new StarPowerUp())
-    setInterval(spawnPowerup, 30000)
+    questionBlocks.push(new QuestionBlock()) for i in [0...3]
+
 
     bulletBills.push(new BulletBill())
     setInterval (->
         bulletBills.push(new BulletBill())
     ), 7000
+
 
     stars.push(new Star()) for i in [0...30]
 
@@ -99,6 +100,8 @@ draw = ->
 
     bulletBills = bulletBills.filter (b) -> b.exists()
     b.draw() for b in bulletBills
+
+    qb.draw() for qb in questionBlocks
 
     healthBar.draw()
 
@@ -152,15 +155,6 @@ bindControls = (ship) ->
             evt.preventDefault()
             ship.shoot()
 
-
-powerUpCounter = 0
-spawnPowerup = () ->
-    powerUp = switch powerUpCounter
-        when 0 then new Mushroom()
-        when 1 then new FireFlower()
-        when 2 then new StarPowerUp()
-    powerUps.push(powerUp)
-    powerUpCounter = (powerUpCounter + 1) % 3
 
 
 incrementScore = (n = 1) ->
@@ -467,10 +461,10 @@ class FireBall extends Drawable
 
 
 class PowerUp extends Drawable
-    constructor: (imgName) ->
+    constructor: (imgName, x, y) ->
         @image = images.get(imgName)
         @size = new Vec2(@image.width, @image.height)
-        super(null, null)
+        super(x, y)
         @headingMatchesRotation = false
         @heading = Math.random() * 2 * Math.PI
         @applyForce(.05)
@@ -481,7 +475,7 @@ class PowerUp extends Drawable
         @drawImage(c, @image)
 
     lifetimeExceeded: () ->
-        (new Date().getTime() - @createTimeMs) > 10000
+        (new Date().getTime() - @createTimeMs) > 30000
 
     exists: =>
         not @pickedUp and not @lifetimeExceeded()
@@ -489,24 +483,24 @@ class PowerUp extends Drawable
 
 
 class Mushroom extends PowerUp
-    constructor: ->
-        super("mushroom")
+    constructor: (x, y) ->
+        super("mushroom", x, y)
         @size = @size.scaleToWidth(75)
 
     onPickup: -> healthBar.increment()
 
 
 class FireFlower extends PowerUp
-    constructor: ->
-        super("fireflower")
+    constructor: (x, y) ->
+        super("fireflower", x, y)
         @size = @size.scaleToWidth(120)
 
     onPickup: -> numFireFlowersPickedUp += 1
 
 
 class StarPowerUp extends PowerUp
-    constructor: ->
-        super("star")
+    constructor: (x, y) ->
+        super("star", x, y)
         @size = @size.scaleToWidth(38)
 
     onPickup: ->
@@ -576,6 +570,35 @@ class BulletBill extends Drawable
         incrementScore(30)
         incrementHitCount()
         coins.push(new Coin(@))
+
+
+
+class QuestionBlock extends Drawable
+    constructor: (x, y) ->
+        super(x, y)
+        @image = images.get("question-block")
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(35)
+
+    render: (c) => @drawImage(c, @image)
+
+    update: =>
+        super
+        hitThisTime = false
+        for b in bullets when @closeEnough(b, @size.x)
+            hitThisTime = true
+            b.onHit()
+            @gotHit = true
+        @onHit() if hitThisTime
+
+
+    onHit: =>
+        powerUp = switch Math.randInt(3)
+            when 0 then new Mushroom(@position.x, @position.y)
+            when 1 then new FireFlower(@position.x, @position.y)
+            when 2 then new StarPowerUp(@position.x, @position.y)
+        powerUps.push(powerUp)
+        @position.x = Math.randInt(canvasWidth)
+        @position.y = Math.randInt(canvasHeight)
 
 
 Math.randInt = (a, b = null) ->
