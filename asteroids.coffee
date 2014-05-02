@@ -12,6 +12,7 @@ asteroids = []
 stars = []
 healthBar = null
 powerUps = []
+coins = []
 score = 0
 hits = 0
 numFireFlowersPickedUp = 0
@@ -32,6 +33,7 @@ onLoad = ->
         { name: "invin4", url: imgBaseUrl + "img/invincible-ship/ship4.gif" }
         { name: "invin5", url: imgBaseUrl + "img/invincible-ship/ship5.gif" }
         { name: "green-shell", url: imgBaseUrl + "img/green-shell.png" }
+        { name: "coin", url: imgBaseUrl + "img/coin.png" }
 
     ]
     images.onLoad(gameInit)
@@ -85,6 +87,9 @@ draw = ->
 
     powerUps = powerUps.filter (p) -> p.exists()
     p.draw() for p in powerUps
+
+    coins = coins.filter (c) -> c.exists()
+    c.draw() for c in coins
 
     healthBar.draw()
 
@@ -257,6 +262,7 @@ class Ship extends Drawable
         else
             @checkAnyAsteroidCollision()
         @checkPowerUpPickup()
+        @checkCoinPickup()
 
     checkAnyAsteroidCollision: =>
         if (asteroids.some (a) => @closeEnough(a, a.size.x))
@@ -272,9 +278,13 @@ class Ship extends Drawable
 
     checkPowerUpPickup: =>
         for p in powerUps when @closeEnough(p, @height)
-            healthBar.increment()
+            #healthBar.increment()
             p.pickedUp = true
             p.onPickup()
+
+    checkCoinPickup: =>
+        for c in coins when @closeEnough(c, @height)
+            c.onPickup()
 
     thrustVisibility: (val) =>
         @thrustVisible = val and not @recovering
@@ -318,9 +328,9 @@ class HealthBar
 class Asteroid extends Drawable
 
     scoreTable =
-        1: 100
-        2: 50
-        3: 20
+        1: 30
+        2: 20
+        3: 10
 
     sizeTable =
         1: 30
@@ -369,6 +379,9 @@ class Asteroid extends Drawable
         if @type > 1
             asteroids.push(new Asteroid(@type - 1, @, hitter, false))
             asteroids.push(new Asteroid(@type - 1, @, hitter, true))
+        else
+            coins.push(new Coin(@))
+
 
 
 class Bullet extends Drawable
@@ -496,8 +509,23 @@ class Star extends Drawable
         c.fillRect(-1, 1, 3, 1)
 
 
+class Coin extends Drawable
+    constructor: (parent) ->
+        super(parent.position.x, parent.position.y)
+        @image = images.get("coin")
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(25)
+        @pickedUp = false
 
+    render: (c) =>
+        @drawImage(c, @image)
 
+    onPickup: =>
+        @pickedUp = true
+        score += 10
+        $("#scoreDisplay").text(score)
+
+    exists: =>
+        not @pickedUp
 
 Math.randInt = (a, b = null) ->
     [a, b] = [0, a] if not b?
