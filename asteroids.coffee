@@ -13,6 +13,7 @@ stars = []
 healthBar = null
 powerUps = []
 coins = []
+bulletBills = []
 score = 0
 hits = 0
 numFireFlowersPickedUp = 0
@@ -34,6 +35,7 @@ onLoad = ->
         { name: "invin5", url: imgBaseUrl + "img/invincible-ship/ship5.gif" }
         { name: "green-shell", url: imgBaseUrl + "img/green-shell.png" }
         { name: "coin", url: imgBaseUrl + "img/coin.png" }
+        { name: "bulletbill", url: imgBaseUrl + "img/bulletbill.png" }
 
     ]
     images.onLoad(gameInit)
@@ -58,6 +60,10 @@ gameInit = ->
     powerUps.push(new StarPowerUp())
     setInterval(spawnPowerup, 30000)
 
+    bulletBills.push(new BulletBill())
+    setInterval (->
+        bulletBills.push(new BulletBill())
+    ), 7000
 
     stars.push(new Star()) for i in [0...30]
 
@@ -90,6 +96,9 @@ draw = ->
 
     coins = coins.filter (c) -> c.exists()
     c.draw() for c in coins
+
+    bulletBills = bulletBills.filter (b) -> b.exists()
+    b.draw() for b in bulletBills
 
     healthBar.draw()
 
@@ -154,7 +163,13 @@ spawnPowerup = () ->
     powerUpCounter = (powerUpCounter + 1) % 3
 
 
+incrementScore = (n = 1) ->
+    score += n
+    $("#scoreDisplay").text(score)
 
+incrementHitCount = (n = 1) ->
+    hits += n
+    $("#hitsDisplay").text(hits)
 
 class Drawable
     constructor: (x, y) ->
@@ -258,14 +273,16 @@ class Ship extends Drawable
         super
         return if @recovering
         if @isInvin
-            @checkInvinAsteroidCollision()
+            @checkInvinCollision(asteroids)
+            @checkInvinCollision(bulletBills)
         else
-            @checkAnyAsteroidCollision()
+            @checkCollision(asteroids)
+            @checkCollision(bulletBills)
         @checkPowerUpPickup()
         @checkCoinPickup()
 
-    checkAnyAsteroidCollision: =>
-        if (asteroids.some (a) => @closeEnough(a, a.size.x))
+    checkCollision: (list) =>
+        if (list.some (e) => @closeEnough(e, e.size.x))
             healthBar.decrement()
             @recovering = true
             @thrustVisibility(false)
@@ -273,8 +290,10 @@ class Ship extends Drawable
                 @recovering = false
             ), 2000
 
-    checkInvinAsteroidCollision: =>
-        a.onHit(@) for a in asteroids when @closeEnough(a, a.size.x)
+
+    checkInvinCollision: (list) =>
+        e.onHit(@) for e in list when @closeEnough(e, e.size.x)
+
 
     checkPowerUpPickup: =>
         for p in powerUps when @closeEnough(p, @height)
@@ -333,27 +352,29 @@ class Asteroid extends Drawable
         3: 10
 
     sizeTable =
-        1: 30
-        2: 50
-        3: 70
+        1: 20
+        2: 40
+        3: 50
 
     constructor: (@type = 3, parent = null, hitter = null, first = false) ->
-        #@image = images.get("asteroid")
         @image = images.get("green-shell")
-        #@size = new Vec2(@image.width, @image.height).scale(@type / 6)
         @size = new Vec2(@image.width, @image.height).scaleToWidth(sizeTable[@type])
         @force = new Vec2(0, 0)
         if parent?
             super(parent.position.x, parent.position.y)
             @heading = hitter.heading + (if first then .2 else -0.2)
         else
-            super(Math.randInt(canvasWidth), Math.randInt(canvasHeight))
+            if Math.randInt(2) is 0
+                super(0, null)
+            else
+                super(null, 0)
             @heading = Math.random() * Math.PI * 2
 
         @headingMatchesRotation = false
         @rotation = Math.PI / 2
         @applyForce(.1)
         @gotHit = false
+        @toggle = false
 
     render: (c) =>
         @drawImage(c, @image)
@@ -372,10 +393,7 @@ class Asteroid extends Drawable
 
     onHit: (hitter) =>
         @gotHit = true
-        score += scoreTable[@type]
-        $("#scoreDisplay").text(score)
-        hits += 1
-        $("#hitsDisplay").text(hits)
+        incrementScore(scoreTable[@type])
         if @type > 1
             asteroids.push(new Asteroid(@type - 1, @, hitter, false))
             asteroids.push(new Asteroid(@type - 1, @, hitter, true))
@@ -521,11 +539,44 @@ class Coin extends Drawable
 
     onPickup: =>
         @pickedUp = true
-        score += 10
-        $("#scoreDisplay").text(score)
+        incrementScore(10)
 
     exists: =>
         not @pickedUp
+
+
+class BulletBill extends Drawable
+    constructor: ->
+        super(0, null)
+        @image = images.get("bulletbill")
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(75)
+        @headingMatchesRotation = false
+        @rotation = Math.PI / 2
+        @heading = 0
+        @applyForce(.1)
+        @gotHit = false
+
+    render: (c) =>
+        @drawImage(c, @image)
+
+    update: =>
+        super
+        hitThisTime = false
+        for b in bullets when @closeEnough(b, @size.x - 20)
+            hitThisTime = true
+            b.onHit()
+            @gotHit = true
+        @onHit() if hitThisTime
+
+    exists: =>
+        not @gotHit and @position.x < canvasWidth
+
+    onHit: =>
+        @gotHit = true
+        incrementScore(30)
+        incrementHitCount()
+        coins.push(new Coin(@))
+
 
 Math.randInt = (a, b = null) ->
     [a, b] = [0, a] if not b?
