@@ -18,6 +18,7 @@ questionBlocks = []
 score = 0
 hits = 0
 numFireFlowersPickedUp = 0
+numCoins = 0
 
 onLoad = ->
     imgBaseUrl = ""
@@ -388,6 +389,7 @@ class Asteroid extends Drawable
     onHit: (hitter) =>
         @gotHit = true
         incrementScore(scoreTable[@type])
+        incrementHitCount()
         if @type > 1
             asteroids.push(new Asteroid(@type - 1, @, hitter, false))
             asteroids.push(new Asteroid(@type - 1, @, hitter, true))
@@ -533,6 +535,10 @@ class Coin extends Drawable
 
     onPickup: =>
         @pickedUp = true
+        numCoins += 1
+        $("#coinDisplay").text(numCoins)
+        if numCoins % 100 is 0
+            healthBar.increment()
         incrementScore(10)
 
     exists: =>
