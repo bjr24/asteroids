@@ -58,7 +58,8 @@ gameInit = ->
     ), 5000
 
 
-    questionBlocks.push(new QuestionBlock()) for i in [0...3]
+    #questionBlocks.push(new QuestionBlock()) for i in [0...3]
+    questionBlocks.push(new QuestionBlock())
 
 
     bulletBills.push(new BulletBill())
@@ -291,13 +292,13 @@ class Ship extends Drawable
 
 
     checkPowerUpPickup: =>
-        for p in powerUps when @closeEnough(p, @height)
+        for p in powerUps when @closeEnough(p, p.size.x)
             #healthBar.increment()
             p.pickedUp = true
             p.onPickup()
 
     checkCoinPickup: =>
-        for c in coins when @closeEnough(c, @height)
+        for c in coins when @closeEnough(c, c.size.x)
             c.onPickup()
 
     thrustVisibility: (val) =>
@@ -403,7 +404,7 @@ class Bullet extends Drawable
         super(ship.position.x, ship.position.y)
         @force = ship.force.copy()
         @heading = ship.heading
-        @distanceRemaining = 3000
+        @distanceRemaining = 4000
         @size = new Vec2(10, 25)
         @applyForce(thrust / 20)
 
@@ -487,7 +488,7 @@ class PowerUp extends Drawable
 class Mushroom extends PowerUp
     constructor: (x, y) ->
         super("mushroom", x, y)
-        @size = @size.scaleToWidth(75)
+        @size = @size.scaleToWidth(38)
 
     onPickup: -> healthBar.increment()
 
@@ -495,7 +496,7 @@ class Mushroom extends PowerUp
 class FireFlower extends PowerUp
     constructor: (x, y) ->
         super("fireflower", x, y)
-        @size = @size.scaleToWidth(120)
+        @size = @size.scaleToWidth(38)
 
     onPickup: -> numFireFlowersPickedUp += 1
 
@@ -549,7 +550,7 @@ class BulletBill extends Drawable
     constructor: ->
         super(0, null)
         @image = images.get("bulletbill")
-        @size = new Vec2(@image.width, @image.height).scaleToWidth(75)
+        @size = new Vec2(@image.width, @image.height).scaleToWidth(60)
         @headingMatchesRotation = false
         @rotation = Math.PI / 2
         @heading = 0

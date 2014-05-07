@@ -106,21 +106,19 @@
   };
 
   gameInit = function() {
-    var i, _i, _j;
+    var i, _i;
     healthBar = new HealthBar(10);
     ship = new Ship();
     asteroids.push(new Asteroid());
     setInterval((function() {
       return asteroids.push(new Asteroid());
     }), 5000);
-    for (i = _i = 0; _i < 3; i = ++_i) {
-      questionBlocks.push(new QuestionBlock());
-    }
+    questionBlocks.push(new QuestionBlock());
     bulletBills.push(new BulletBill());
     setInterval((function() {
       return bulletBills.push(new BulletBill());
     }), 7000);
-    for (i = _j = 0; _j < 30; i = ++_j) {
+    for (i = _i = 0; _i < 30; i = ++_i) {
       stars.push(new Star());
     }
     setInterval(draw, fpsToInterval(frameRate));
@@ -471,7 +469,7 @@
       _results = [];
       for (_i = 0, _len = powerUps.length; _i < _len; _i++) {
         p = powerUps[_i];
-        if (!(this.closeEnough(p, this.height))) {
+        if (!(this.closeEnough(p, p.size.x))) {
           continue;
         }
         p.pickedUp = true;
@@ -485,7 +483,7 @@
       _results = [];
       for (_i = 0, _len = coins.length; _i < _len; _i++) {
         c = coins[_i];
-        if (this.closeEnough(c, this.height)) {
+        if (this.closeEnough(c, c.size.x)) {
           _results.push(c.onPickup());
         }
       }
@@ -656,7 +654,7 @@
       Bullet.__super__.constructor.call(this, ship.position.x, ship.position.y);
       this.force = ship.force.copy();
       this.heading = ship.heading;
-      this.distanceRemaining = 3000;
+      this.distanceRemaining = 4000;
       this.size = new Vec2(10, 25);
       this.applyForce(thrust / 20);
     }
@@ -796,7 +794,7 @@
 
     function Mushroom(x, y) {
       Mushroom.__super__.constructor.call(this, "mushroom", x, y);
-      this.size = this.size.scaleToWidth(75);
+      this.size = this.size.scaleToWidth(38);
     }
 
     Mushroom.prototype.onPickup = function() {
@@ -812,7 +810,7 @@
 
     function FireFlower(x, y) {
       FireFlower.__super__.constructor.call(this, "fireflower", x, y);
-      this.size = this.size.scaleToWidth(120);
+      this.size = this.size.scaleToWidth(38);
     }
 
     FireFlower.prototype.onPickup = function() {
@@ -908,7 +906,7 @@
       this.render = __bind(this.render, this);
       BulletBill.__super__.constructor.call(this, 0, null);
       this.image = images.get("bulletbill");
-      this.size = new Vec2(this.image.width, this.image.height).scaleToWidth(75);
+      this.size = new Vec2(this.image.width, this.image.height).scaleToWidth(60);
       this.headingMatchesRotation = false;
       this.rotation = Math.PI / 2;
       this.heading = 0;
